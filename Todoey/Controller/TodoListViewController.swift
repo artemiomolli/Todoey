@@ -7,23 +7,24 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListViewController: UITableViewController {
 
     var itemArray = [Item]()
-    let defaults = UserDefaults.standard
+    var selectedCategory: Category? {
+        
+        didSet{
+            
+            loadData()
+        }
+    }
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     override func viewDidLoad() {
         
         super.viewDidLoad()
-       
-        let newItem = Item()
-        newItem.title = "Test"
-        itemArray.append(newItem)
-        if let items = defaults.array(forKey: "ToDoListArray") as? [Item] {
-
-            itemArray = items
-        }
     }
     
     //MARK - UITableViewDelegate
@@ -47,15 +48,12 @@ class TodoListViewController: UITableViewController {
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
 
+//        context.delete(itemArray[indexPath.row])
+//        itemArray.remove(at: indexPath.row)
         itemArray[indexPath.row].done =  !itemArray[indexPath.row].done
-        if tableView.cellForRow(at: indexPath)?.accessoryType == .checkmark {
-            
-            tableView.cellForRow(at: indexPath)?.accessoryType = .none
-        }else {
-            
-            tableView.cellForRow(at: indexPath)?.accessoryType = .checkmark
-        }
         
+        saveData()
+   
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -69,14 +67,16 @@ class TodoListViewController: UITableViewController {
         
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
             
-            let newItem = Item()
+         
+            
+            let newItem = Item(context: self.context)
             newItem.title = textField.text!
+            newItem.done = false
+            newItem.parentCategory = self.selectedCategory
             
             self.itemArray.append(newItem)
             
-            self.defaults.set(self.itemArray, forKey:  "ToDoItemCell")
-
-            self.tableView.reloadData()
+            self.saveData()
         }
         
         alert.addTextField { (alertTextField) in
@@ -89,5 +89,70 @@ class TodoListViewController: UITableViewController {
         
         present(alert, animated: true, completion: nil)
     }
+    
+    //MARK - Model Manipulations
+    
+    func saveData() {
+        
+        do {
+            
+          try context.save()
+        } catch {
+        
+            print(error)
+        }
+        
+        self.tableView.reloadData()
+    }
+    
+    func loadData(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicte: NSPredicate? = nil) {
+
+        let predicate = NSPredicate(format: "parentCategory.name MATCHES %@", (selectedCategory?.name)!)
+        
+        if let pred = predicte {
+            
+            let compoundPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, pred])
+            request.predicate = compoundPredicate
+        }else {
+            
+            request.predicate = predicate
+        }
+        
+        do {
+            
+            itemArray = try context.fetch(request)
+        }catch {
+            
+            print(error)
+        }
+        
+        tableView.reloadData()
+    }
 }
 
+extension TodoListViewController: UISearchBarDelegate {
+    
+    //MARK -  UISearchBarDelegate
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        
+        let request: NSFetchRequest<Item> = Item.fetchRequest()
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        
+        loadData(with: request, predicte: predicate )
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        
+        if searchBar.text?.count == 0 {
+            
+            loadData()
+            
+            DispatchQueue.main.async {
+                
+                searchBar.resignFirstResponder()
+            }
+        }
+    }
+}
