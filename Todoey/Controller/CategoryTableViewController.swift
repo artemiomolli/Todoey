@@ -7,12 +7,12 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class CategoryTableViewController: UITableViewController {
 
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    var categories = [Category]()
+    let realm = try! Realm()
+    var categories: Results<Category>?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,13 +28,10 @@ class CategoryTableViewController: UITableViewController {
         
         let action = UIAlertAction(title: "Add Category", style: .default) { (action) in
   
-            let newItem = Category(context: self.context)
-            
+            let newItem = Category()
             newItem.name = textField.text!
             
-            self.categories.append(newItem)
-            
-            self.saveData()
+            self.saveData(category: newItem)
         }
         
         alert.addTextField { (alertTextField) in
@@ -54,15 +51,15 @@ class CategoryTableViewController: UITableViewController {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
         
-        let item = categories[indexPath.row]
-        cell.textLabel?.text = item.name
+        let item = categories?[indexPath.row]
+        cell.textLabel?.text = item?.name ?? "No categories"
         
         return cell
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
-        return categories.count
+        return categories?.count ?? 1
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -74,11 +71,14 @@ class CategoryTableViewController: UITableViewController {
 
      //MARK - Manipulation
     
-    func saveData() {
+    func saveData(category: Category) {
         
         do {
             
-            try context.save()
+            try realm.write {
+                
+                realm.add(category)
+            }
         } catch {
             
             print(error)
@@ -88,19 +88,13 @@ class CategoryTableViewController: UITableViewController {
     }
     
     func loadData() {
-       
-        let fetchRequest: NSFetchRequest<Category> = Category.fetchRequest()
-        
-        do {
-            
-            categories = try context.fetch(fetchRequest)
-        }catch {
-            
-            print(error)
-        }
+
+        categories = realm.objects(Category.self)
         
         tableView.reloadData()
     }
+    
+    //MARK - Navigation
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         
@@ -108,7 +102,7 @@ class CategoryTableViewController: UITableViewController {
         
         if let indexPath = tableView.indexPathForSelectedRow {
             
-            destonationVC.selectedCategory = categories[indexPath.row]
+            destonationVC.selectedCategory = categories?[indexPath.row]
         }
     }
 }
